@@ -1,91 +1,80 @@
-Tema 2 "Protocoale de Comunicatie"  
-Aplicatie client-server TCP si UDP pentru gestionarea mesajelor
-Autor: Potop Horia-IOan
+# Tema 2 – Communication Protocols  
+**TCP & UDP Client–Server Application for Message Management**  
+**Author:** Potop Horia-Ioan  
 
-==============================  
-1. INTRODUCERE  
-Tema propune implementarea unui broker de mesaje de tip publish-subscribe, cu doua tipuri de componente:  
-- serverul (broker), care primeste mesaje UDP de la publishers si le redirectioneaza catre abonatii TCP,  
-- subscribers TCP, care trimit comenzi de subscribe/unsubscribe si primesc mesaje de la server.  
+---
 
-==============================  
-2. COMPILARE SI RULARE  
-Proiectul contine un Makefile simplu, cu urmatoarele comenzi:  
-• `make server` - compileaza serverul (./server)  
-• `make subscriber` - compileaza clientul TCP (./subscriber)  
-• `make clean` - sterge fisierele obiect si executabilele  
+## 1. INTRODUCTION  
+This project implements a **publish–subscribe message broker** with two main components:  
+- **Server (broker)** – receives UDP messages from publishers and forwards them to TCP subscribers.  
+- **TCP subscribers** – send subscribe/unsubscribe commands and receive messages from the server.  
 
-Pentru lansare:  
-• Server: `./server <PORT>`  
-• Subscriber: `./subscriber <ID_CLIENT> <IP_SERVER> <PORT_SERVER>`  
+---
 
-==============================  
-3. FUNCTIONALITATE
+## 2. COMPILATION AND EXECUTION  
+The project includes a simple Makefile with the following commands:  
+- `make server` – compiles the server (`./server`)  
+- `make subscriber` – compiles the TCP client (`./subscriber`)  
+- `make clean` – removes object files and executables  
 
+### Launch commands:  
+- **Server:** `./server <PORT>`  
+- **Subscriber:** `./subscriber <CLIENT_ID> <SERVER_IP> <SERVER_PORT>`  
 
-• La pornire, serverul deschide simultan un socket UDP (receptionare mesaje publishers) si unul TCP (acceptare abonari).  
-• Foloseste `select()` pentru a astepta pe cele doua socket-uri si pe stdin. 
-• Singura comanda de la tastatura pentru server este comanda "exit" ce determina inchiderea serverului si a clientilor TCP conectati.
+---
 
-a) Componenta de redistribuire
-• Dupa ce am creat serverul si am conectat clientii, iar unii din ei au ales topicurile de interes prin comenzi subscribe/unsubscribe
-ramane sa fie realizata primirea pachetelor UDP si redirectionarea acestora doar la clientii ce sunt subscribed la acel topic.
-• Acest lucru este realizat de functia "contains_topic" care verifica pt fiecare client daca mesajul de pe topicul primit se   
-regaseste printre topicurile de interes
-Wildcard "*" inlocuieste zero sau mai multe niveluri de topic, "+" inlocuieste exact un nivel. Fiecare mesaj ajunge o singura data la fiecare client, chiar daca mai multe abonari ii corespund aceluiasi topic.
-• Cu ajutorul "create_pck", mesajele sunt decodificate conform formatului de topic, tip si payload (INT, SHORT_REAL, FLOAT, STRING), apoi impachetate intr-o structura TCP
-si retransmise fiecarui abonat online al topicului respectiv.  
-• Mesajele sunt trimise pe fiecare socket in parte si informatia primita de client este afisata pe ecran.
+## 3. FUNCTIONALITY  
 
-b) Componenta de creare conexiune
-• Noile cereri de conectare ale clientilor TCP sunt verificate de server:
-    -Un client nou este adaugat impreuna cu file descriptorul aferent intr-o structura de date de tip map,
-    si se asteapta comenzi de subscribe/unsubscribe sau exit de la acesta.
-    Pana atunci acesta nu are niciun topic favorit si nu primeste niciun mesaj
-    -Un client vechi redevine activ, componenta "online" fiind acum false->true. In acest caz
-    toate topicurile de interes adaugate in conexiuni anterioare, redevin active pentru acesta (erau pastrate).
-    -Un client deja conectat incearca sa se conecteze din nou, serverul indicandu-i ca nu se poate realiza acest lucru.
+- At startup, the server opens both a UDP socket (for receiving publisher messages) and a TCP socket (for accepting subscriber connections).  
+- Uses `select()` to wait on both sockets and on stdin.  
+- The only keyboard command accepted by the server is **"exit"**, which closes the server and all connected TCP clients.  
 
-c) Componenta de abonare,dezabonare si deconectare
-• Pentru fiecare abonare TCP ("subscribe <topic>" / "unsubscribe <topic>"), serverul actualizeaza structurile interne de date si trimite subscriber-ului un mesaj de confirmare pe stdout. 
-• Aceste comenzi sunt verificate ca pot fi realizate (unsubscribe de la un topic neexistent), iar clientul devine pregatit sa primeasca mesajele dorite.
-• La deconectare, serverul inchide socket-ul TCP si seteaza clientul ca si "offline" in structura de date, in ideea unei posibile reconectari sub acelasi id.
+### a) Message Redistribution Component  
+- Once the server and clients are running, and some clients have subscribed to topics using the `subscribe`/`unsubscribe` commands, the system handles receiving UDP packets and redistributing them only to subscribers of the corresponding topics.  
+- This is managed by the **`contains_topic`** function, which checks for each client if the received topic matches their subscriptions.  
+- Wildcard `"*"` replaces zero or more topic levels, while `"+"` replaces exactly one level. Each message reaches a subscriber only once, even if multiple subscriptions match the same topic.  
+- The **`create_pck`** function decodes messages according to their format (topic, type, and payload – INT, SHORT_REAL, FLOAT, STRING), packages them into a TCP structure, and forwards them to all online subscribers for that topic.  
+- Messages are sent on each socket individually, and clients display them immediately upon reception.  
 
-De asemenea, din perspectiva fisierului "subscriber.cpp" functionalitatea este de asemenea impartita in 3 componente:
+### b) Connection Management Component  
+- New TCP connection requests are verified by the server:  
+  - A **new client** is added along with its file descriptor into a map structure, awaiting commands. Initially, it has no active topics.  
+  - A **returning client** (reconnecting with the same ID) is marked as online again, reactivating its previously stored topics.  
+  - If a **duplicate connection** attempt is made (same ID already connected), the server notifies the client that the connection cannot be established.  
 
-a) Componenta de conectare
-•Activam clientul si asteptam sa fim acceptati de server. Apoi trimitem un mesaj de conectare in care includem si ID-ul clientului pentru a ne putea identifica.
+### c) Subscription, Unsubscription, and Disconnection Component  
+- For each `subscribe <topic>` / `unsubscribe <topic>` command, the server updates its internal data structures and confirms the action to the subscriber via stdout.  
+- Invalid operations (e.g., unsubscribe from a non-existing topic) are handled gracefully.  
+- When disconnecting, the server closes the client socket and marks it as offline in its internal state to allow future reconnection with the same ID.  
 
-b) Componenta de trimitere comenzi
-•Aici avem 3 comenzi:
-    -subscribe <topic> - ne aboneaza la un topic
-    -unsubscribe <topic> - ne dezaboneaza de la un topic
-    -exit - inchide conexiunea TCP cu serverul
-• Aici avem functia "create_req" ce se ocupa de parsarea mesajului de pe STDIN si crearea unui pachet de trimis serverului.
-• La inchidere, clientul TCP trimite un mesaj de deconectare serverului si inchide socket-ul.
+### TCP Subscriber Functionality  
+a) **Connection** – The client connects to the server, sends its ID, and awaits confirmation.  
+b) **Command Handling** – Supports `subscribe`, `unsubscribe`, and `exit` commands. Input is parsed via the **`create_req`** function and sent to the server. Upon `exit`, the client closes the TCP socket.  
+c) **Receiving and Displaying Messages** – The TCP client receives messages for subscribed topics and displays them neatly on stdout.  
 
-c) Componenta de primire si afisare
-• Clientul TCP primeste de la server mesajele legate de topicurile la care s-a abonat si le afiseaza ordonat pe stdout.
+---
 
-==============================  
-4. ARHITECTURA SI STRUCTURILE DE DATE  
-Serverul retine:  
-• mapparea ID_CLIENT → file descriptor TCP → stare online/offline,  
-• mapparea client → set de topics,  
-• functii de potrivire pattern/topic cu suport pentru wildcard.  
+## 4. ARCHITECTURE AND DATA STRUCTURES  
+The server maintains:  
+- A mapping between **CLIENT_ID → TCP file descriptor → online/offline state**  
+- A mapping between **client → set of subscribed topics**  
+- Functions for **pattern/topic matching with wildcard support**  
 
-Protocolul (tcp_pck) aplicatie-TCP este implementat printr-o structura compacta, marcata `packed`, care contine adresa IP si portul de origine UDP, numele topicului, tipul de date text si valoarea in format ASCII.  
-Iar serv_pck este structura de date ce contine comanda dorita de client si topicul dorit.
+The application-level protocol (`tcp_pck`) is implemented as a compact, packed structure containing the UDP origin IP and port, topic name, data type, and ASCII value.  
+`serv_pck` is the structure for client commands and topic names.  
 
-==============================  
-5. VALIDARI SI TRATAREA ERORILOR
-• Toate apelurile de sistem (socket, bind, listen, accept, select, recvfrom, recv, send, setsockopt) sunt verificate, si pe eroare programul se inchide cu mesaj sugestiv pe stderr (macro DIE).  
-• Buffer-ul de stdout este dezactivat (`_IONBF`) pentru ca mesajele de log si feedaback sa ajunga imediat, fara buffering.  
-• Se dezactiveaza algoritmul Nagle (`TCP_NODELAY`) pe toate conexiunile TCP pentru a minimiza latenta trimiterii mesajelor scurte.  
-• Comenzile de subscribe/unsubscribe sunt validate: exact doua token-uri, topic ≤ 50 caractere, fara tokene in plus, cu trimiteri de eroare la input invalid.  
-• Pachetele UDP sunt decodificate cu grija la byte-order (ntohs/ntohl) si structurile rezultate au intotdeauna terminatoare de sir pentru topicuri mai scurte de 50 caractere.  
+---
 
-==============================  
-6. ALTE INFORMATII
-• Clientii isi pastreaza eficient topicurile in urma unei deconectari urmate de o reconectare.
-• Implementarea acopera integral cerintele de: multiplexare TCP+UDP, wildcard-uri, protocol eficient de nivel aplicatie, management robust al erorilor si deconectarilor, fara mesaje suplimentare. Codul este modular si documentat, iar Makefile-ul simplifica compilarea.  
+## 5. VALIDATION AND ERROR HANDLING  
+- All system calls (`socket`, `bind`, `listen`, `accept`, `select`, `recvfrom`, `recv`, `send`, `setsockopt`) are checked for errors using the **DIE** macro, printing an error message to stderr and exiting.  
+- **stdout buffering** is disabled (`_IONBF`) to ensure immediate display of logs and feedback.  
+- **Nagle’s algorithm** is disabled (`TCP_NODELAY`) on all TCP connections to minimize latency.  
+- Commands are validated: exactly two tokens, topic ≤ 50 characters, and no extra arguments; invalid inputs trigger error messages.  
+- UDP packets are decoded carefully with proper **byte-order handling** (`ntohs` / `ntohl`) and null-terminated topics.  
+
+---
+
+## 6. OTHER INFORMATION  
+- Clients retain their subscribed topics across disconnections and reconnections.  
+- The implementation fully meets requirements for: TCP+UDP multiplexing, wildcard topics, efficient application-level protocol, robust error handling, and clean disconnection logic.  
+- The code is modular, well-documented, and easy to compile using the provided Makefile.  
